@@ -29,6 +29,9 @@ public:
   ///* state covariance matrix
   MatrixXd P_;
 
+	///* noise covariance matrix
+	MatrixXd Q_;
+
   ///* predicted sigma points matrix
   MatrixXd Xsig_pred_;
 
@@ -65,6 +68,9 @@ public:
   ///* Augmented state dimension
   int n_aug_;
 
+	///* Sigma point dimension
+	int n_sig_;
+
   ///* Sigma point spreading parameter
   double lambda_;
 
@@ -89,6 +95,13 @@ public:
    * @param meas_package The latest measurement data of either radar or laser
    */
   void ProcessMeasurement(MeasurementPackage meas_package);
+
+	/**
+	 * @param x_k_aug augmented state
+	 * @param delta_t
+	 * @return predicted state
+	 */
+	VectorXd Process(const VectorXd &x_k_aug, double delta_t);
 
   /**
    * Prediction Predicts sigma points, the state, and the state covariance
