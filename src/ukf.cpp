@@ -84,9 +84,13 @@ void UKF::ProcessMeasurement(MeasurementPackage meas_package) {
 	long long timestamp = meas_package.timestamp_;
 	VectorXd z = meas_package.raw_measurements_;
 
-	double px, py;
+	// timestep in us
+	double delta_t = (timestamp - time_us_) / 1E6;
+	time_us_ = timestamp;
 
+	// initialize
 	if (!is_initialized_) {
+		double px, py;
 
 		if (meas_package.sensor_type_ == MeasurementPackage::RADAR) {
 			double rho, phi;
@@ -122,10 +126,6 @@ void UKF::ProcessMeasurement(MeasurementPackage meas_package) {
 		is_initialized_ = true;
 		return;
 	}
-
-	// timestep in us
-	double delta_t = (timestamp - time_us_) / 1E6;
-	time_us_ = timestamp;
 
 	// prediction
 	Prediction(delta_t);
@@ -191,8 +191,6 @@ void UKF::Prediction(double delta_t) {
 		x_diff = Xsig_pred_.col(i) - x_pred;
 		//angle normalization
 		x_diff(3) = atan2(sin(x_diff(3)), cos(x_diff(3)));
-		//while (x_diff(3)> M_PI) x_diff(3)-=2.*M_PI;
-		//while (x_diff(3)<-M_PI) x_diff(3)+=2.*M_PI;
 		P_pred += weights_(i)*x_diff*x_diff.transpose();
 	}
 
