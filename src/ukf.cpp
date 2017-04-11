@@ -45,7 +45,7 @@ UKF::UKF() {
   std_a_ = 3;
 
   // Process noise standard deviation yaw acceleration in rad/s^2
-  std_yawdd_ = 0.3;
+  std_yawdd_ = 1.0;
 
   // Laser measurement noise standard deviation position1 in m
   std_laspx_ = 0.15;
@@ -314,7 +314,7 @@ void UKF::UpdateLidar(MeasurementPackage meas_package) {
 	R(0, 0) = std_laspx_*std_laspx_;
 	R(1, 1) = std_laspy_*std_laspy_;
 
-	double nis = Update(z, meas_package, R);
+	NIS_laser_ = Update(z, meas_package, R);
 }
 
 /**
@@ -332,7 +332,7 @@ void UKF::UpdateRadar(MeasurementPackage meas_package) {
 	R(1, 1) = std_radphi_*std_radphi_;
 	R(2, 2) = std_radrd_*std_radrd_;
 
-	double nis = Update(z, meas_package, R);
+	NIS_radar_ = Update(z, meas_package, R);
 }
 
 /**
