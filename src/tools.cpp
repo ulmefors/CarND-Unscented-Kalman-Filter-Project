@@ -28,7 +28,7 @@ VectorXd Tools::CalculateRMSE(const vector<VectorXd> &estimations,
 		error += residual;
 	}
 
-	VectorXd rmse = sqrt(error/nb_est);
+	VectorXd rmse = (error/nb_est).array().sqrt();
 
 	return rmse;
 }
