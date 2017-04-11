@@ -347,7 +347,8 @@ VectorXd UKF::CartesianToPolar(const VectorXd &x) {
 
 	double rho = sqrt(px*px + py*py);
 	double phi = atan2(py, px);
-	double rho_dot = (px*vx + py*vy)/rho;
+	// avoid division by zero
+	double rho_dot = rho == 0 ? 0 : (px*vx + py*vy)/rho;
 
 	VectorXd x_pol = VectorXd(n_radar_);
 	x_pol << rho, phi, rho_dot;
