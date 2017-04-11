@@ -71,6 +71,12 @@ public:
 	///* Sigma point dimension
 	int n_sig_;
 
+	///* Lidar dimension
+	int n_lidar_;
+
+	///* Radar dimension
+	int n_radar_;
+
   ///* Sigma point spreading parameter
   double lambda_;
 
@@ -121,6 +127,8 @@ public:
    * @param meas_package The measurement at k+1
    */
   void UpdateRadar(MeasurementPackage meas_package);
+
+	VectorXd CartesianToPolar(const VectorXd &x);
 };
 
 #endif /* UKF_H */

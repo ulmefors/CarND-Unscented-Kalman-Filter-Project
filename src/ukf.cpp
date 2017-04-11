@@ -18,6 +18,9 @@ UKF::UKF() {
 	n_sig_ = 2 * n_aug_ + 1; // 15
 	lambda_ = 3 - n_x_;
 
+	n_radar_ = 3;
+	n_lidar_ = 2;
+
 	is_initialized_ = false;
 
   // if this is false, laser measurements will be ignored (except during init)
@@ -33,7 +36,7 @@ UKF::UKF() {
   P_ = MatrixXd(n_x_, n_x_);
 
 	// initial sigma point matrix
-	Xsig_pred_ = MatrixXd(n_x_, 2*n_aug_ + 1);
+	Xsig_pred_ = MatrixXd(n_x_, n_sig_);
 
 	// initial time
 	time_us_ = 0;
@@ -89,10 +92,12 @@ void UKF::ProcessMeasurement(MeasurementPackage meas_package) {
 			phi = z(1);
 			px = rho * cos(phi);
 			py = rho * sin(phi);
-		} else if (meas_package.sensor_type_ == MeasurementPackage::LASER){
+		}
+		else if (meas_package.sensor_type_ == MeasurementPackage::LASER){
 			px = z(0);
 			py = z(1);
-		} else {
+		}
+		else {
 			cout << "Warning: Incorrect sensor type" << endl;
 			return;
 		}
@@ -116,16 +121,19 @@ void UKF::ProcessMeasurement(MeasurementPackage meas_package) {
 	double delta_t = (timestamp - time_us_) / 1E6;
 	time_us_ = timestamp;
 
+	// prediction
 	Prediction(delta_t);
 
-  /**
-  TODO:
-
-  Complete this function! Make sure you switch between lidar and radar
-  measurements.
-  */
-
-
+	// update measurement
+	if (meas_package.sensor_type_ == MeasurementPackage::RADAR) {
+		UpdateRadar(meas_package);
+	}
+	else if (meas_package.sensor_type_ == MeasurementPackage::LASER){
+		UpdateLidar(meas_package);
+	}
+	else {
+		cout << "Warning: Incorrect sensor type" << endl;
+	}
 }
 
 /**
@@ -134,12 +142,7 @@ void UKF::ProcessMeasurement(MeasurementPackage meas_package) {
  * measurement and this one.
  */
 void UKF::Prediction(double delta_t) {
-  /**
-  TODO:
 
-  Complete this function! Estimate the object's location. Modify the state
-  vector, x_. Predict sigma points, the state, and the state covariance matrix.
-  */
 	double nu_a {0}; //TODO: Value
 	double nu_psi_dd {0}; //TODO: Value
 
@@ -175,7 +178,7 @@ void UKF::Prediction(double delta_t) {
 		x_pred += weights_(i)*sigma_point;
 	}
 
-	// predict covariance matrix
+	// predict state covariance matrix
 	VectorXd x_diff = VectorXd(n_x_);
 	MatrixXd P_pred = MatrixXd::Zero(n_x_, n_x_);
 	for (int i = 0; n_sig_; i++) {
@@ -186,17 +189,18 @@ void UKF::Prediction(double delta_t) {
 		P_pred += weights_(i)*x_diff*x_diff.transpose();
 	}
 
-	// update date
+	// update state
 	x_ = x_pred;
 
-	// update covariance matrix
+	// update state covariance matrix
 	P_ = P_pred;
 }
 
 /**
- * @param x_k_aug augmented state
- * @param delta_t
- * @return predicted state
+ * @param {VectorXd} x_k_aug augmented state
+ * @param {double} delta_t the change in time (in seconds) between the last
+ * measurement and this one.
+ * @return {VectorXd} predicted state
  */
 VectorXd UKF::Process(const VectorXd &x_k_aug, double delta_t) {
 	double px = x_k_aug(0);
@@ -239,6 +243,12 @@ VectorXd UKF::Process(const VectorXd &x_k_aug, double delta_t) {
  * @param {MeasurementPackage} meas_package
  */
 void UKF::UpdateLidar(MeasurementPackage meas_package) {
+
+	double px, py;
+	VectorXd z = meas_package.raw_measurements_;
+	px = z(0);
+	py = z(1);
+
   /**
   TODO:
 
@@ -254,12 +264,62 @@ void UKF::UpdateLidar(MeasurementPackage meas_package) {
  * @param {MeasurementPackage} meas_package
  */
 void UKF::UpdateRadar(MeasurementPackage meas_package) {
-  /**
-  TODO:
 
-  Complete this function! Use radar data to update the belief about the object's
-  position. Modify the state vector, x_, and covariance, P_.
+	double rho, phi, rho_d;
+	VectorXd z = meas_package.raw_measurements_;
+	rho = z(0);
+	phi = z(1);
+	rho_d = z(2);
 
-  You'll also need to calculate the radar NIS.
-  */
+	// measurement sigma points
+	MatrixXd Zsig = MatrixXd(n_radar_, n_sig_);
+	VectorXd z_pred = VectorXd::Zero(n_radar_);
+	VectorXd sigma_point;
+	for (int i = 0; i < n_sig_; i++) {
+		sigma_point = CartesianToPolar(Xsig_pred_.col(i));
+		Zsig.col(i) = sigma_point;
+		z_pred += weights_(i)*sigma_point;
+	}
+
+	// measurement covariance
+	MatrixXd S = MatrixXd::Zero(n_radar_, n_radar_);
+	VectorXd z_diff = VectorXd(n_radar_);
+	for (int i = 0; i < n_sig_; i++) {
+		z_diff = Zsig.col(i) - z_pred;
+		S += weights_(i)*z_diff*z_diff.transpose();
+	}
+
+	// measurement noise covariance
+	MatrixXd R = MatrixXd::Zero(n_radar_, n_radar_);
+	R(0, 0) = std_radr_*std_radr_;
+	R(1, 1) = std_radphi_*std_radphi_;
+	R(2, 2) = std_radrd_*std_radrd_;
+
+	// add measurement noise to covariance
+	S += R;
+
+	/**
+	TODO:
+
+	Complete this function! Use radar data to update the belief about the object's
+	position. Modify the state vector, x_, and covariance, P_.
+
+	You'll also need to calculate the radar NIS.
+	*/
+}
+
+VectorXd UKF::CartesianToPolar(const VectorXd &x) {
+	double px = x(0);
+	double py = x(1);
+	double v = x(2);
+	double psi = x(3);
+	double vx = v*cos(psi);
+	double vy = v*sin(psi);
+
+	double rho = sqrt(px*px + py*py);
+	double phi = atan2(py, px);
+	double rho_dot = (px*vx + py*vy)/rho;
+
+	VectorXd x_pol {rho, phi, rho_dot};
+	return x_pol;
 }
