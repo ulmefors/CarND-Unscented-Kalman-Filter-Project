@@ -128,8 +128,21 @@ public:
    */
   void UpdateRadar(MeasurementPackage meas_package);
 
+	/**
+	 * Converts cartesian state to polar format compatible with radar
+	 * @param x state in cartesian coordinates
+	 * @return state in polar coordinates
+	 */
 	VectorXd CartesianToPolar(const VectorXd &x);
-	void Update(const VectorXd &z, const MeasurementPackage meas_package, const MatrixXd R);
+
+	/**
+	 * Updates generically for radar and lidar
+	 * @param z raw measurement
+	 * @param meas_package measurement package at k+1
+	 * @param R measurement noise covariance matrix
+	 * @return nis normalized innovation squared
+	 */
+	double Update(const VectorXd &z, const MeasurementPackage meas_package, const MatrixXd R);
 };
 
 #endif /* UKF_H */

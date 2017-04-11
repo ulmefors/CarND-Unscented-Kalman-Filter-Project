@@ -245,7 +245,14 @@ VectorXd UKF::Process(const VectorXd &x_k_aug, double delta_t) {
 	return x_k + xd_dt + x_noise;
 }
 
-void UKF::Update(const VectorXd &z, const MeasurementPackage meas_package, const MatrixXd R) {
+/**
+ * Updates generically for radar and lidar
+ * @param z raw measurement
+ * @param meas_package measurement package at k+1
+ * @param R measurement noise covariance matrix
+ * @return nis normalized innovation squared
+ */
+double UKF::Update(const VectorXd &z, const MeasurementPackage meas_package, const MatrixXd R) {
 	long n_dim = z.size();
 
 	// predicted measurement sigma points
@@ -372,6 +379,11 @@ void UKF::UpdateRadar(MeasurementPackage meas_package) {
 	double epsilon = (z - z_pred).transpose()*S.inverse()*(z - z_pred);
 }
 
+/**
+ * Convert cartesian state to polar format compatible with radar
+ * @param x state in cartesian coordinates
+ * @return state in polar coordinates
+ */
 VectorXd UKF::CartesianToPolar(const VectorXd &x) {
 	double px = x(0);
 	double py = x(1);
