@@ -24,15 +24,15 @@ UKF::UKF() {
 	is_initialized_ = false;
 
   // if this is false, laser measurements will be ignored (except during init)
-  use_laser_ = true;
+  use_laser_ = false;
 
   // if this is false, radar measurements will be ignored (except during init)
   use_radar_ = true;
 
-  // initial state vector
+  // state vector
   x_ = VectorXd(n_x_);
 
-  // initial covariance matrix
+  // covariance matrix
   P_ = MatrixXd(n_x_, n_x_);
 
 	// initial sigma point matrix
@@ -62,8 +62,10 @@ UKF::UKF() {
   // Radar measurement noise standard deviation radius change in m/s
   std_radrd_ = 0.3;
 
-	// initial weights vector
-	weights_ = VectorXd(11);
+	// weights vector
+	weights_ = VectorXd(n_sig_);
+	weights_.fill(0.5/(lambda_ + n_aug_));
+	weights_(0) = lambda_/(lambda_+n_aug_);
 
 	// noise covariance matrix
 	Q_ = MatrixXd(2, 2);
@@ -106,11 +108,15 @@ void UKF::ProcessMeasurement(MeasurementPackage meas_package) {
 		x_ << px, py, 0, 0, 0;
 
 		// initial covariance matrix
-		P_.fill(0.0);
+		P_.fill(0.0); //TODO: values
 
-		// define weights to calculate predicted state mean
-		weights_.fill(0.5/(lambda_ + n_aug_));
-		weights_(0) = lambda_/(lambda_+n_aug_);
+		// use laser
+		if (use_laser_) cout << "Use laser" << endl;
+		else cout << "Ignore laser" << endl;
+
+		// use radar
+		if (use_radar_) cout << "Use radar" << endl;
+		else cout << "Ignore radar" << endl;
 
 		// state is now initialized
 		is_initialized_ = true;
@@ -126,10 +132,10 @@ void UKF::ProcessMeasurement(MeasurementPackage meas_package) {
 
 	// update measurement
 	if (meas_package.sensor_type_ == MeasurementPackage::RADAR) {
-		UpdateRadar(meas_package);
+		if (use_radar_) UpdateRadar(meas_package);
 	}
 	else if (meas_package.sensor_type_ == MeasurementPackage::LASER){
-		UpdateLidar(meas_package);
+		if (use_laser_) UpdateLidar(meas_package);
 	}
 	else {
 		cout << "Warning: Incorrect sensor type" << endl;
@@ -181,11 +187,12 @@ void UKF::Prediction(double delta_t) {
 	// predict state covariance matrix
 	VectorXd x_diff = VectorXd(n_x_);
 	MatrixXd P_pred = MatrixXd::Zero(n_x_, n_x_);
-	for (int i = 0; n_sig_; i++) {
+	for (int i = 0; i < n_sig_; i++) {
 		x_diff = Xsig_pred_.col(i) - x_pred;
 		//angle normalization
-		while (x_diff(3)> M_PI) x_diff(3)-=2.*M_PI;
-		while (x_diff(3)<-M_PI) x_diff(3)+=2.*M_PI;
+		x_diff(3) = atan2(sin(x_diff(3)), cos(x_diff(3)));
+		//while (x_diff(3)> M_PI) x_diff(3)-=2.*M_PI;
+		//while (x_diff(3)<-M_PI) x_diff(3)+=2.*M_PI;
 		P_pred += weights_(i)*x_diff*x_diff.transpose();
 	}
 
@@ -234,7 +241,9 @@ VectorXd UKF::Process(const VectorXd &x_k_aug, double delta_t) {
 						0.5*delta_t*delta_t*nu_psi_dd,
 						delta_t*nu_psi_dd;
 
-	VectorXd x_k {px, py, v, psi, psi_d};
+	VectorXd x_k = VectorXd(n_x_);
+	x_k << px, py, v, psi, psi_d;
+
 	return x_k + xd_dt + x_noise;
 }
 
@@ -265,27 +274,24 @@ void UKF::UpdateLidar(MeasurementPackage meas_package) {
  */
 void UKF::UpdateRadar(MeasurementPackage meas_package) {
 
-	double rho, phi, rho_d;
-	VectorXd z = meas_package.raw_measurements_;
-	rho = z(0);
-	phi = z(1);
-	rho_d = z(2);
+	// measurement
+	VectorXd z = meas_package.raw_measurements_.head(n_radar_);
 
-	// measurement sigma points
-	MatrixXd Zsig = MatrixXd(n_radar_, n_sig_);
+	// predicted measurement sigma points
+	MatrixXd Zsig_pred = MatrixXd(n_radar_, n_sig_);
 	VectorXd z_pred = VectorXd::Zero(n_radar_);
 	VectorXd sigma_point;
 	for (int i = 0; i < n_sig_; i++) {
 		sigma_point = CartesianToPolar(Xsig_pred_.col(i));
-		Zsig.col(i) = sigma_point;
+		Zsig_pred.col(i) = sigma_point;
 		z_pred += weights_(i)*sigma_point;
 	}
 
-	// measurement covariance
+	// predicted measurement covariance
 	MatrixXd S = MatrixXd::Zero(n_radar_, n_radar_);
 	VectorXd z_diff = VectorXd(n_radar_);
 	for (int i = 0; i < n_sig_; i++) {
-		z_diff = Zsig.col(i) - z_pred;
+		z_diff = Zsig_pred.col(i) - z_pred;
 		S += weights_(i)*z_diff*z_diff.transpose();
 	}
 
@@ -297,6 +303,22 @@ void UKF::UpdateRadar(MeasurementPackage meas_package) {
 
 	// add measurement noise to covariance
 	S += R;
+
+	// cross-correlation between sigma points in state space and measurement space
+	MatrixXd T = MatrixXd::Zero(n_x_, n_radar_);
+	for (int i = 0; i < n_sig_; i++) {
+		T += weights_(i)*(Xsig_pred_.col(i)-x_)*(Zsig_pred.col(i) - z_pred).transpose();
+	}
+
+	// kalman gain
+	MatrixXd K = MatrixXd(n_x_, n_radar_);
+	K = T * S.inverse();
+
+	// state update
+	x_ += K * (z - z_pred);
+
+	// covariance update
+	P_ -= K*S*K.transpose();
 
 	/**
 	TODO:
@@ -320,6 +342,7 @@ VectorXd UKF::CartesianToPolar(const VectorXd &x) {
 	double phi = atan2(py, px);
 	double rho_dot = (px*vx + py*vy)/rho;
 
-	VectorXd x_pol {rho, phi, rho_dot};
+	VectorXd x_pol = VectorXd(n_radar_);
+	x_pol << rho, phi, rho_dot;
 	return x_pol;
 }
