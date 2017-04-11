@@ -129,6 +129,7 @@ public:
   void UpdateRadar(MeasurementPackage meas_package);
 
 	VectorXd CartesianToPolar(const VectorXd &x);
+	void Update(const VectorXd &z, const MeasurementPackage meas_package, const MatrixXd R);
 };
 
 #endif /* UKF_H */

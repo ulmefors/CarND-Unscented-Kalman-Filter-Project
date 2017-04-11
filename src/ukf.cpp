@@ -24,10 +24,10 @@ UKF::UKF() {
 	is_initialized_ = false;
 
   // if this is false, laser measurements will be ignored (except during init)
-  use_laser_ = false;
+  use_laser_ = true;
 
   // if this is false, radar measurements will be ignored (except during init)
-  use_radar_ = true;
+  use_radar_ = false;
 
   // state vector
   x_ = VectorXd(n_x_);
@@ -42,7 +42,7 @@ UKF::UKF() {
 	time_us_ = 0;
 
   // Process noise standard deviation longitudinal acceleration in m/s^2
-  std_a_ = 0.3;
+  std_a_ = 3;
 
   // Process noise standard deviation yaw acceleration in rad/s^2
   std_yawdd_ = 0.3;
@@ -247,17 +247,67 @@ VectorXd UKF::Process(const VectorXd &x_k_aug, double delta_t) {
 	return x_k + xd_dt + x_noise;
 }
 
+void UKF::Update(const VectorXd &z, const MeasurementPackage meas_package, const MatrixXd R) {
+	long n_dim = z.size();
+
+	// predicted measurement sigma points
+	MatrixXd Zsig_pred = MatrixXd(n_dim, n_sig_);
+	VectorXd z_pred = VectorXd::Zero(n_dim);
+	VectorXd sigma_point;
+	for (int i = 0; i < n_sig_; i++) {
+		if (meas_package.sensor_type_ == MeasurementPackage::RADAR) sigma_point = CartesianToPolar(Xsig_pred_.col(i));
+		else if (meas_package.sensor_type_== MeasurementPackage::LASER) sigma_point = Xsig_pred_.col(i).head(n_dim);
+		else assert(false);
+		Zsig_pred.col(i) = sigma_point;
+		z_pred += weights_(i)*sigma_point;
+	}
+
+	// predicted measurement covariance
+	MatrixXd S = MatrixXd::Zero(n_dim, n_dim);
+	VectorXd z_diff = VectorXd(n_dim);
+	for (int i = 0; i < n_sig_; i++) {
+		z_diff = Zsig_pred.col(i) - z_pred;
+		S += weights_(i)*z_diff*z_diff.transpose();
+	}
+
+	// add measurement noise to covariance
+	S += R;
+
+	// cross-correlation between sigma points in state space and measurement space
+	MatrixXd T = MatrixXd::Zero(n_x_, n_dim);
+	for (int i = 0; i < n_sig_; i++) {
+		T += weights_(i)*(Xsig_pred_.col(i)-x_)*(Zsig_pred.col(i) - z_pred).transpose();
+	}
+
+	// kalman gain
+	MatrixXd K = MatrixXd(n_x_, n_dim);
+	K = T*S.inverse();
+
+	// state update
+	x_ += K*(z - z_pred);
+
+	// covariance update
+	P_ -= K*S*K.transpose();
+
+	// NIS - normalized innovation squared
+	double epsilon = (z - z_pred).transpose()*S.inverse()*(z - z_pred);
+}
+
 /**
  * Updates the state and the state covariance matrix using a laser measurement.
  * @param {MeasurementPackage} meas_package
  */
 void UKF::UpdateLidar(MeasurementPackage meas_package) {
 
-	double px, py;
-	VectorXd z = meas_package.raw_measurements_;
-	px = z(0);
-	py = z(1);
+	// measurement
+	VectorXd z = meas_package.raw_measurements_.head(n_lidar_);
 
+	// measurement noise covariance
+	MatrixXd R = MatrixXd::Zero(n_lidar_, n_lidar_);
+	R(0, 0) = std_laspx_*std_laspx_;
+	R(1, 1) = std_laspy_*std_laspy_;
+
+	Update(z, meas_package, R);
   /**
   TODO:
 
@@ -277,6 +327,12 @@ void UKF::UpdateRadar(MeasurementPackage meas_package) {
 	// measurement
 	VectorXd z = meas_package.raw_measurements_.head(n_radar_);
 
+	// measurement noise covariance
+	MatrixXd R = MatrixXd::Zero(n_radar_, n_radar_);
+	R(0, 0) = std_radr_*std_radr_;
+	R(1, 1) = std_radphi_*std_radphi_;
+	R(2, 2) = std_radrd_*std_radrd_;
+
 	// predicted measurement sigma points
 	MatrixXd Zsig_pred = MatrixXd(n_radar_, n_sig_);
 	VectorXd z_pred = VectorXd::Zero(n_radar_);
@@ -295,12 +351,6 @@ void UKF::UpdateRadar(MeasurementPackage meas_package) {
 		S += weights_(i)*z_diff*z_diff.transpose();
 	}
 
-	// measurement noise covariance
-	MatrixXd R = MatrixXd::Zero(n_radar_, n_radar_);
-	R(0, 0) = std_radr_*std_radr_;
-	R(1, 1) = std_radphi_*std_radphi_;
-	R(2, 2) = std_radrd_*std_radrd_;
-
 	// add measurement noise to covariance
 	S += R;
 
@@ -312,22 +362,16 @@ void UKF::UpdateRadar(MeasurementPackage meas_package) {
 
 	// kalman gain
 	MatrixXd K = MatrixXd(n_x_, n_radar_);
-	K = T * S.inverse();
+	K = T*S.inverse();
 
 	// state update
-	x_ += K * (z - z_pred);
+	x_ += K*(z - z_pred);
 
 	// covariance update
 	P_ -= K*S*K.transpose();
 
-	/**
-	TODO:
-
-	Complete this function! Use radar data to update the belief about the object's
-	position. Modify the state vector, x_, and covariance, P_.
-
-	You'll also need to calculate the radar NIS.
-	*/
+	// NIS - normalized innovation squared
+	double epsilon = (z - z_pred).transpose()*S.inverse()*(z - z_pred);
 }
 
 VectorXd UKF::CartesianToPolar(const VectorXd &x) {
