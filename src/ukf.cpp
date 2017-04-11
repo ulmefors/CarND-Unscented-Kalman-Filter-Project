@@ -27,7 +27,7 @@ UKF::UKF() {
   use_laser_ = true;
 
   // if this is false, radar measurements will be ignored (except during init)
-  use_radar_ = false;
+  use_radar_ = true;
 
   // state vector
   x_ = VectorXd(n_x_);
@@ -272,6 +272,7 @@ double UKF::Update(const VectorXd &z, const MeasurementPackage meas_package, con
 	VectorXd z_diff = VectorXd(n_dim);
 	for (int i = 0; i < n_sig_; i++) {
 		z_diff = Zsig_pred.col(i) - z_pred;
+		if (meas_package.sensor_type_ == MeasurementPackage::RADAR) z_diff(1) = atan2(sin(z_diff(1)), cos(z_diff(1)));
 		S += weights_(i)*z_diff*z_diff.transpose();
 	}
 
@@ -296,6 +297,7 @@ double UKF::Update(const VectorXd &z, const MeasurementPackage meas_package, con
 
 	// NIS - normalized innovation squared
 	double epsilon = (z - z_pred).transpose()*S.inverse()*(z - z_pred);
+	return epsilon;
 }
 
 /**
@@ -312,15 +314,7 @@ void UKF::UpdateLidar(MeasurementPackage meas_package) {
 	R(0, 0) = std_laspx_*std_laspx_;
 	R(1, 1) = std_laspy_*std_laspy_;
 
-	Update(z, meas_package, R);
-  /**
-  TODO:
-
-  Complete this function! Use lidar data to update the belief about the object's
-  position. Modify the state vector, x_, and covariance, P_.
-
-  You'll also need to calculate the lidar NIS.
-  */
+	double nis = Update(z, meas_package, R);
 }
 
 /**
@@ -338,45 +332,7 @@ void UKF::UpdateRadar(MeasurementPackage meas_package) {
 	R(1, 1) = std_radphi_*std_radphi_;
 	R(2, 2) = std_radrd_*std_radrd_;
 
-	// predicted measurement sigma points
-	MatrixXd Zsig_pred = MatrixXd(n_radar_, n_sig_);
-	VectorXd z_pred = VectorXd::Zero(n_radar_);
-	VectorXd sigma_point;
-	for (int i = 0; i < n_sig_; i++) {
-		sigma_point = CartesianToPolar(Xsig_pred_.col(i));
-		Zsig_pred.col(i) = sigma_point;
-		z_pred += weights_(i)*sigma_point;
-	}
-
-	// predicted measurement covariance
-	MatrixXd S = MatrixXd::Zero(n_radar_, n_radar_);
-	VectorXd z_diff = VectorXd(n_radar_);
-	for (int i = 0; i < n_sig_; i++) {
-		z_diff = Zsig_pred.col(i) - z_pred;
-		S += weights_(i)*z_diff*z_diff.transpose();
-	}
-
-	// add measurement noise to covariance
-	S += R;
-
-	// cross-correlation between sigma points in state space and measurement space
-	MatrixXd T = MatrixXd::Zero(n_x_, n_radar_);
-	for (int i = 0; i < n_sig_; i++) {
-		T += weights_(i)*(Xsig_pred_.col(i)-x_)*(Zsig_pred.col(i) - z_pred).transpose();
-	}
-
-	// kalman gain
-	MatrixXd K = MatrixXd(n_x_, n_radar_);
-	K = T*S.inverse();
-
-	// state update
-	x_ += K*(z - z_pred);
-
-	// covariance update
-	P_ -= K*S*K.transpose();
-
-	// NIS - normalized innovation squared
-	double epsilon = (z - z_pred).transpose()*S.inverse()*(z - z_pred);
+	double nis = Update(z, meas_package, R);
 }
 
 /**
