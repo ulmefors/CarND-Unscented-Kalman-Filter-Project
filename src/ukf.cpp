@@ -33,7 +33,7 @@ UKF::UKF() {
   x_ = VectorXd(n_x_);
 
   // covariance matrix
-  P_ = MatrixXd(n_x_, n_x_);
+  P_ = MatrixXd::Zero(n_x_, n_x_);
 
 	// initial sigma point matrix
 	Xsig_pred_ = MatrixXd(n_x_, n_sig_);
@@ -42,10 +42,10 @@ UKF::UKF() {
 	time_us_ = 0;
 
   // Process noise standard deviation longitudinal acceleration in m/s^2
-  std_a_ = 3;
+  std_a_ = 3.0;
 
   // Process noise standard deviation yaw acceleration in rad/s^2
-  std_yawdd_ = 1.0;
+  std_yawdd_ = 3.0;
 
   // Laser measurement noise standard deviation position1 in m
   std_laspx_ = 0.15;
@@ -110,9 +110,6 @@ void UKF::ProcessMeasurement(MeasurementPackage meas_package) {
 
 		// initial state
 		x_ << px, py, 0, 0, 0;
-
-		// initial covariance matrix
-		P_.fill(0.0); //TODO: values
 
 		// use laser
 		if (use_laser_) cout << "Use laser" << endl;
