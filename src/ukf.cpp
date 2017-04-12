@@ -258,8 +258,7 @@ double UKF::Update(const VectorXd &z, const MeasurementPackage meas_package, con
 	VectorXd sigma_point;
 	for (int i = 0; i < n_sig_; i++) {
 		if (meas_package.sensor_type_ == MeasurementPackage::RADAR) sigma_point = CartesianToPolar(Xsig_pred_.col(i));
-		else if (meas_package.sensor_type_== MeasurementPackage::LASER) sigma_point = Xsig_pred_.col(i).head(n_dim);
-		else assert(false);
+		if (meas_package.sensor_type_== MeasurementPackage::LASER) sigma_point = Xsig_pred_.col(i).head(n_dim);
 		Zsig_pred.col(i) = sigma_point;
 		z_pred += weights_(i)*sigma_point;
 	}
@@ -277,9 +276,15 @@ double UKF::Update(const VectorXd &z, const MeasurementPackage meas_package, con
 	S += R;
 
 	// cross-correlation between sigma points in state space and measurement space
+	VectorXd x_diff = VectorXd(n_x_);
 	MatrixXd T = MatrixXd::Zero(n_x_, n_dim);
 	for (int i = 0; i < n_sig_; i++) {
-		T += weights_(i)*(Xsig_pred_.col(i)-x_)*(Zsig_pred.col(i) - z_pred).transpose();
+		x_diff = Xsig_pred_.col(i) - x_;
+		z_diff = Zsig_pred.col(i) - z_pred;
+		// angle normalization
+		x_diff(3) = atan2(sin(x_diff(3)), cos(x_diff(3)));
+		if (meas_package.sensor_type_ == MeasurementPackage::RADAR) z_diff(1) = atan2(sin(z_diff(1)), cos(z_diff(1)));
+		T += weights_(i)*x_diff*z_diff.transpose();
 	}
 
 	// kalman gain
@@ -287,13 +292,15 @@ double UKF::Update(const VectorXd &z, const MeasurementPackage meas_package, con
 	K = T*S.inverse();
 
 	// state update
-	x_ += K*(z - z_pred);
+	z_diff = z - z_pred;
+	if (meas_package.sensor_type_ == MeasurementPackage::RADAR) z_diff(1) = atan2(sin(z_diff(1)), cos(z_diff(1)));
+	x_ += K*z_diff;
 
 	// covariance update
 	P_ -= K*S*K.transpose();
 
 	// NIS - normalized innovation squared
-	double epsilon = (z - z_pred).transpose()*S.inverse()*(z - z_pred);
+	double epsilon = z_diff.transpose()*S.inverse()*z_diff;
 	return epsilon;
 }
 
