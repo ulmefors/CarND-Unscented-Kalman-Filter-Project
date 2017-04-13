@@ -32,7 +32,13 @@ public:
 	///* noise covariance matrix
 	MatrixXd Q_;
 
-  ///* predicted sigma points matrix
+	///* radar measurement noise covariance
+	MatrixXd R_radar_;
+
+	///* laser measurement noise covariance
+	MatrixXd R_laser_;
+
+	///* predicted sigma points matrix
   MatrixXd Xsig_pred_;
 
   ///* time when the state is true, in us

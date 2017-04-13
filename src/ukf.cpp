@@ -33,7 +33,7 @@ UKF::UKF() {
   x_ = VectorXd(n_x_);
 
   // covariance matrix
-  P_ = MatrixXd::Zero(n_x_, n_x_);
+  P_ = MatrixXd(n_x_, n_x_);
 
 	// initial sigma point matrix
 	Xsig_pred_ = MatrixXd(n_x_, n_sig_);
@@ -45,7 +45,7 @@ UKF::UKF() {
   std_a_ = 3.0;
 
   // Process noise standard deviation yaw acceleration in rad/s^2
-  std_yawdd_ = 3.0;
+  std_yawdd_ = 0.40;
 
   // Laser measurement noise standard deviation position1 in m
   std_laspx_ = 0.15;
@@ -71,6 +71,15 @@ UKF::UKF() {
 	Q_ = MatrixXd(2, 2);
 	Q_ << std_a_*std_a_, 0,
 				0, std_yawdd_*std_yawdd_;
+
+	// radar measurement noise covariance
+	R_radar_ <<	std_radr_*std_radr_, 0, 0,
+							0, std_radphi_*std_radphi_, 0,
+							0, 0, std_radrd_*std_radrd_;
+
+	// laser measurement noise covariance
+	R_laser_ << std_laspx_*std_laspx_, 0,
+							0, std_laspy_*std_laspy_;
 }
 
 UKF::~UKF() {}
@@ -108,8 +117,9 @@ void UKF::ProcessMeasurement(MeasurementPackage meas_package) {
 			return;
 		}
 
-		// initial state
+		// initial state and covariance
 		x_ << px, py, 0, 0, 0;
+		P_ = MatrixXd::Identity(n_x_, n_x_);
 
 		// use laser
 		if (use_laser_) cout << "Use laser" << endl;
@@ -140,14 +150,34 @@ void UKF::ProcessMeasurement(MeasurementPackage meas_package) {
 }
 
 /**
+ * Updates the state and the state covariance matrix using a laser measurement.
+ * @param {MeasurementPackage} meas_package
+ */
+void UKF::UpdateLidar(MeasurementPackage meas_package) {
+	// measurement
+	VectorXd z = meas_package.raw_measurements_.head(n_lidar_);
+	NIS_laser_ = Update(z, meas_package, R_laser_);
+}
+
+/**
+ * Updates the state and the state covariance matrix using a radar measurement.
+ * @param {MeasurementPackage} meas_package
+ */
+void UKF::UpdateRadar(MeasurementPackage meas_package) {
+	// measurement
+	VectorXd z = meas_package.raw_measurements_.head(n_radar_);
+	NIS_radar_ = Update(z, meas_package, R_radar_);
+}
+
+/**
  * Predicts sigma points, the state, and the state covariance matrix.
  * @param {double} delta_t the change in time (in seconds) between the last
  * measurement and this one.
  */
 void UKF::Prediction(double delta_t) {
 
-	double nu_a {0}; //TODO: Value
-	double nu_psi_dd {0}; //TODO: Value
+	double nu_a {0};
+	double nu_psi_dd {0};
 
 	// augmented state x
 	VectorXd x_aug = VectorXd(n_aug_);
@@ -214,11 +244,11 @@ VectorXd UKF::Process(const VectorXd &x_k_aug, double delta_t) {
 	double nu_psi_dd = x_k_aug(6);
 	double delta_px, delta_py;
 
-	VectorXd x_noise = VectorXd(n_x_); // predicted state
+	VectorXd x_noise = VectorXd(n_x_); // acceleration noise
 	VectorXd x_k1 = VectorXd(n_x_); // predicted state
 	VectorXd xd_dt = VectorXd(n_x_); // integral x_dot for delta_t
 
-	if (abs(psi_d) < 0.001) {
+	if (fabs(psi_d) < 0.001) {
 		delta_px = v*cos(psi)*delta_t;
 		delta_py = v*sin(psi)*delta_t;
 	}
@@ -236,10 +266,14 @@ VectorXd UKF::Process(const VectorXd &x_k_aug, double delta_t) {
 						0.5*delta_t*delta_t*nu_psi_dd,
 						delta_t*nu_psi_dd;
 
+
 	VectorXd x_k = VectorXd(n_x_);
 	x_k << px, py, v, psi, psi_d;
 
-	return x_k + xd_dt + x_noise;
+	// prediction = previous state + integral of speed + noise
+	x_k1 = x_k + xd_dt + x_noise;
+	x_k1(3) = atan2(sin(x_k1(3)), cos(x_k1(3)));
+	return x_k1;
 }
 
 /**
@@ -295,6 +329,7 @@ double UKF::Update(const VectorXd &z, const MeasurementPackage meas_package, con
 	z_diff = z - z_pred;
 	if (meas_package.sensor_type_ == MeasurementPackage::RADAR) z_diff(1) = atan2(sin(z_diff(1)), cos(z_diff(1)));
 	x_ += K*z_diff;
+	x_(3) = atan2(sin(x_(3)), cos(x_(3)));
 
 	// covariance update
 	P_ -= K*S*K.transpose();
@@ -302,41 +337,6 @@ double UKF::Update(const VectorXd &z, const MeasurementPackage meas_package, con
 	// NIS - normalized innovation squared
 	double epsilon = z_diff.transpose()*S.inverse()*z_diff;
 	return epsilon;
-}
-
-/**
- * Updates the state and the state covariance matrix using a laser measurement.
- * @param {MeasurementPackage} meas_package
- */
-void UKF::UpdateLidar(MeasurementPackage meas_package) {
-
-	// measurement
-	VectorXd z = meas_package.raw_measurements_.head(n_lidar_);
-
-	// measurement noise covariance
-	MatrixXd R = MatrixXd::Zero(n_lidar_, n_lidar_);
-	R(0, 0) = std_laspx_*std_laspx_;
-	R(1, 1) = std_laspy_*std_laspy_;
-
-	NIS_laser_ = Update(z, meas_package, R);
-}
-
-/**
- * Updates the state and the state covariance matrix using a radar measurement.
- * @param {MeasurementPackage} meas_package
- */
-void UKF::UpdateRadar(MeasurementPackage meas_package) {
-
-	// measurement
-	VectorXd z = meas_package.raw_measurements_.head(n_radar_);
-
-	// measurement noise covariance
-	MatrixXd R = MatrixXd::Zero(n_radar_, n_radar_);
-	R(0, 0) = std_radr_*std_radr_;
-	R(1, 1) = std_radphi_*std_radphi_;
-	R(2, 2) = std_radrd_*std_radrd_;
-
-	NIS_radar_ = Update(z, meas_package, R);
 }
 
 /**
