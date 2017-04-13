@@ -73,11 +73,13 @@ UKF::UKF() {
 				0, std_yawdd_*std_yawdd_;
 
 	// radar measurement noise covariance
+	R_radar_ = MatrixXd(n_radar_, n_radar_);
 	R_radar_ <<	std_radr_*std_radr_, 0, 0,
 							0, std_radphi_*std_radphi_, 0,
 							0, 0, std_radrd_*std_radrd_;
 
-	// laser measurement noise covariance
+	// lidar measurement noise covariance
+	R_laser_ = MatrixXd(n_lidar_, n_lidar_);
 	R_laser_ << std_laspx_*std_laspx_, 0,
 							0, std_laspy_*std_laspy_;
 }
@@ -353,7 +355,8 @@ VectorXd UKF::CartesianToPolar(const VectorXd &x) {
 	double vy = v*sin(psi);
 
 	double rho = sqrt(px*px + py*py);
-	double phi = atan2(py, px);
+	// arctan undefined in origin
+	double phi = (fabs(px) == 0 && fabs(py) == 0) ? 0 : atan2(py, px);
 	// avoid division by zero
 	double rho_dot = rho == 0 ? 0 : (px*vx + py*vy)/rho;
 
