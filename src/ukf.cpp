@@ -16,7 +16,7 @@ UKF::UKF() {
 	n_x_ = 5;
 	n_aug_ = n_x_ + 2; // 7
 	n_sig_ = 2 * n_aug_ + 1; // 15
-	lambda_ = 3 - n_x_;
+	lambda_ = 3 - n_aug_;
 
 	n_radar_ = 3;
 	n_lidar_ = 2;
@@ -45,7 +45,7 @@ UKF::UKF() {
   std_a_ = 0.25;
 
   // Process noise standard deviation yaw acceleration in rad/s^2
-  std_yawdd_ = 0.55;
+  std_yawdd_ = 0.60;
 
   // Laser measurement noise standard deviation position1 in m
   std_laspx_ = 0.15;
